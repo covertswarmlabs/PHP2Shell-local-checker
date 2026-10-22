@@ -13,7 +13,7 @@ Remote scanning for PHP2Shell is fundamentally unreliable. External scanners can
 - **WAFs block the behavioural probes.** Cloudflare, Akamai, and ModSecurity already filter requests containing `PHP_SESSION_UPLOAD_PROGRESS` — the field name central to one of the attack paths. Any active probe that tries to test the vulnerable code path is stopped at the edge before it reaches PHP.
 - **No safe behavioural difference exists on normal requests.** Lab testing confirms that vulnerable and patched PHP builds produce byte-identical responses to benign GET requests. The only observable differences require sending attack-shaped requests (multipart uploads, OOM triggers), which can be destructive for production systems.
 
-This script sidesteps all of those problems by running on the host itself, where it can read the actual PHP binary version, check for a definitive patch marker (`memory_hard_limit_percent` — an INI directive introduced by the fix commit), inspect configuration files directly, detect distro backports via package changelogs, and enumerate Docker containers. The result is a high-confidence verdict that no external scanner can match.
+This script sidesteps all of those problems by running on the host itself, where it can read the actual PHP binary version, check for a definitive patch marker (`memory_hard_limit_percent` — an INI directive introduced by the fix commit), inspect configuration files directly, detect distro backports via package changelogs, and enumerate Docker containers. The result is a high-confidence verdict that external scanners struggle to achieve.
 
 ## Requirements
 
