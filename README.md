@@ -16,14 +16,16 @@ No external dependencies. Single file, stdlib only.
 
 ```bash
 # Human-readable output
-sudo python3 php2shell_local_checker.py
+python3 php2shell_local_checker.py
 
 # JSON output
-sudo python3 php2shell_local_checker.py --json
+python3 php2shell_local_checker.py --json
 
 # Save JSON report to file
-sudo python3 php2shell_local_checker.py --json --output /tmp/php2shell-report.json
+python3 php2shell_local_checker.py --json --output /tmp/php2shell-report.json
 ```
+
+Running as root (`sudo`) gives more complete coverage — it can discover PHP binaries in restricted directories, query FPM pool configs, and enumerate Docker containers. Without root, the script still works but may miss some installations. The report notes when coverage is incomplete.
 
 ## What it checks
 
