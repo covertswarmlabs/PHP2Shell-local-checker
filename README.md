@@ -4,6 +4,17 @@ Host-local vulnerability checker for **CVE-2026-109618** and **CVE-2026-109619**
 
 Run this script **on the server you want to assess**. It inspects PHP binaries, configuration, and package metadata to determine whether the host is affected.
 
+## Why a local checker?
+
+Remote scanning for PHP2Shell is fundamentally unreliable. External scanners can only work with what the server chooses to disclose, and in practice that is often nothing useful:
+
+- **Version headers are frequently hidden.** `expose_php = Off` suppresses `X-Powered-By`, and reverse proxies, CDNs, and load balancers routinely strip or rewrite backend headers. Without a version string, an external scanner cannot determine patch status.
+- **Vendor backports are invisible from outside.** Distributions like Debian, Ubuntu, and RHEL backport security fixes without changing the PHP version number. An external scanner sees `PHP/8.2.25` and flags it as vulnerable — but the binary may already contain the fix. There is no way to distinguish a backported build from an unpatched one based on the version string alone.
+- **WAFs block the behavioural probes.** Cloudflare, Akamai, and ModSecurity already filter requests containing `PHP_SESSION_UPLOAD_PROGRESS` — the field name central to one of the attack paths. Any active probe that tries to test the vulnerable code path is stopped at the edge before it reaches PHP.
+- **No safe behavioural difference exists on normal requests.** Lab testing confirms that vulnerable and patched PHP builds produce byte-identical responses to benign GET requests. The only observable differences require sending attack-shaped requests (multipart uploads, OOM triggers), which is destructive and inappropriate for production systems.
+
+This script sidesteps all of those problems by running on the host itself, where it can read the actual PHP binary version, check for a definitive patch marker (`memory_hard_limit_percent` — an INI directive introduced by the fix commit), inspect configuration files directly, detect distro backports via package changelogs, and enumerate Docker containers. The result is a high-confidence verdict that no external scanner can match.
+
 ## Requirements
 
 - Python 3.6+
