@@ -1,4 +1,4 @@
-# php2shell_local_checker.py
+# PHP2Shell Local Checker
 
 Host-local vulnerability checker for **CVE-2026-109618** and **CVE-2026-109619** (PHP2Shell).
 
@@ -13,7 +13,7 @@ Remote scanning for PHP2Shell is fundamentally unreliable. External scanners can
 - **WAFs block the behavioural probes.** Cloudflare, Akamai, and ModSecurity already filter requests containing `PHP_SESSION_UPLOAD_PROGRESS` — the field name central to one of the attack paths. Any active probe that tries to test the vulnerable code path is stopped at the edge before it reaches PHP.
 - **No safe behavioural difference exists on normal requests.** Lab testing confirms that vulnerable and patched PHP builds produce byte-identical responses to benign GET requests. The only observable differences require sending attack-shaped requests (multipart uploads, OOM triggers), which can be destructive for production systems.
 
-This script sidesteps all of those problems by running on the host itself, where it can read the actual PHP binary version, check for a definitive patch marker (`memory_hard_limit_percent` — an INI directive introduced by the fix commit), inspect configuration files directly, detect distro backports via package changelogs, and enumerate Docker containers. The result is a high-confidence verdict that external scanners struggle to achieve.
+This script sidesteps all of those problems by running on the host itself, where it can read the actual PHP binary version, check for a definitive patch marker (`memory_hard_limit_percent` — an INI directive introduced by the fix commit), inspect configuration files directly, detect distro backports via package changelogs, and enumerate Docker containers. The result is a high-confidence verdict that no external scanner can match.
 
 ## Requirements
 
@@ -79,6 +79,14 @@ Exit code 0 means every assessed runtime is confirmed safe. Exit code 1 means at
 - Docker containers without an accessible `php` CLI binary are skipped
 - PHP installations in non-standard locations not covered by the search list may be missed
 - Running as non-root may miss binaries in restricted directories
+
+## Testing
+
+Unit tests verify the verdict logic (version comparison, patch marker handling, backport detection, overall rollup, exit codes) without needing Docker or PHP:
+
+```bash
+python3 tests_classify.py -v
+```
 
 ## References
 

@@ -58,7 +58,7 @@ from typing import Any, Dict, List, Optional, Tuple
 # Constants
 # ---------------------------------------------------------------------------
 
-TOOL_VERSION = "1.2.0"
+TOOL_VERSION = "1.3.0"
 TOOL_NAME = "php2shell-host-checker"
 
 ADVISORIES = {
@@ -503,35 +503,41 @@ def classify(
                  "CVE-2026-109619 (multipart parser) may still apply — upgrade PHP."])
 
     # Check for backported fix in package changelog.
+    # Changelog mentions are treated as evidence, not confirmation.  A CVE
+    # reference in a changelog does not prove the installed binary contains
+    # the fix — the package may have been mentioned in a tracking entry, or
+    # the binary may not match the installed package.
     if backport and backport.get("found_cves"):
         found = backport["found_cves"]
-        covers_both = backport["covers_both"]
+        notes.append(
+            f"Package changelog references: {', '.join(found)}. "
+            "CVE references alone do not prove this installed build "
+            "contains both fixes.")
 
-        # If patch_marker was False, we have a contradiction: the changelog
-        # mentions the CVE but the directive is missing.  Trust the marker.
-        if patch_marker is False:
+        if patch_marker is None:
+            # We can't check the marker (binary didn't produce a usable
+            # ini dump).  The changelog alone is insufficient to confirm.
+            fixed = FIXED_BY_BRANCH.get(branch)
+            version_is_fixed = fixed is not None and (
+                version > fixed
+                or (version == fixed and not is_prerelease(version_raw))
+            )
+            if not version_is_fixed:
+                return (
+                    VERDICT_UNKNOWN, "low",
+                    notes + [
+                        "The patch marker could not be checked. Verify "
+                        "the installed package revision against vendor "
+                        "confirmation that both CVEs are fixed."
+                    ],
+                )
+            # Version is at/above fix — fall through to version checks below.
+        elif patch_marker is False:
             notes.append(
-                f"Note: the package changelog references {', '.join(found)}, but "
-                f"the {PATCH_MARKER_DIRECTIVE} directive is absent from the binary. "
-                "The installed binary may not actually contain the fix.")
+                f"The patch marker is absent despite changelog references. "
+                "Changelog references must not override that result."
+            )
             # Fall through to version-based checks.
-        else:
-            backport_notes = [
-                f"Distribution package changelog references: {', '.join(found)}."
-            ]
-            if not covers_both:
-                missing = CVE_109619 if CVE_109618 in found else CVE_109618
-                backport_notes.append(
-                    f"Only {found[0]} was found in the changelog. {missing} is not "
-                    f"explicitly mentioned. Assumption: the upstream fix addresses "
-                    f"both CVEs in a single commit, so a backport for one likely "
-                    f"covers both — but this has not been independently verified "
-                    f"for this package.")
-            else:
-                backport_notes.append(
-                    "Both CVEs are referenced. Verify the running binary matches "
-                    "the installed package.")
-            return (VERDICT_PATCHED, "high", backport_notes)
 
     # EOL branches.
     if branch in EOL_BRANCHES:
@@ -557,6 +563,14 @@ def classify(
 
         # Check if version is at or above the fix.
         if version > fixed or (version == fixed and not is_prerelease(version_raw)):
+            if patch_marker is False:
+                return (VERDICT_UNKNOWN, "low",
+                        notes + [
+                            f"Version {version_str(version)} is at or above the "
+                            f"fixed release ({version_str(fixed)}), but the patch "
+                            f"marker ({PATCH_MARKER_DIRECTIVE}) is absent. Resolve "
+                            "this conflicting evidence before marking it patched."
+                        ])
             return (VERDICT_PATCHED, "high",
                     notes + [f"Version {version_str(version)} is at or above the fix "
                              f"({version_str(fixed)})."])
@@ -768,12 +782,15 @@ def run_assessment(output_path: Optional[str] = None) -> Dict[str, Any]:
         overall = VERDICT_MITIGATED
     elif VERDICT_EOL_MITIGATED in runtime_verdicts:
         overall = VERDICT_EOL_MITIGATED
+    elif VERDICT_UNKNOWN in runtime_verdicts:
+        # UNKNOWN from a genuine runtime means we couldn't fully assess
+        # it.  This must not be masked by PATCHED results from other
+        # runtimes — the overall result should preserve the uncertainty.
+        overall = VERDICT_UNKNOWN
     elif VERDICT_PATCHED in runtime_verdicts:
         overall = VERDICT_PATCHED
     elif VERDICT_NOT_AFFECTED in runtime_verdicts:
         overall = VERDICT_NOT_AFFECTED
-    elif VERDICT_UNKNOWN in runtime_verdicts:
-        overall = VERDICT_UNKNOWN
     elif not runtime_verdicts and not all_results:
         overall = VERDICT_UNKNOWN
     elif not runtime_verdicts and build_tool_unknowns:
